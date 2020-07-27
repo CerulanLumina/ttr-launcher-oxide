@@ -1,6 +1,6 @@
 [package]
 name = "ttr-launcher-oxide"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["CerulanLumina <CerulanLumina@users.noreply.github.com>"]
 edition = "2018"
 
@@ -16,6 +16,7 @@ rand = "0.7.3"
 sha = "1.0.3"
 rpassword = "4.0.5"
 rprompt = "1.0.5"
+qbsdiff = "1.3.1"
 
 [dependencies.bzip2]
 version = "0.4.1"

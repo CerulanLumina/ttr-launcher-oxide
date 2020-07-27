@@ -27,6 +27,10 @@ pub struct Options {
     /// Forgets any password held in the keyring.
     #[structopt(long)]
     pub reset_keyring: bool,
+
+    /// Dumps the cookie and game server to stdout for manual launching
+    #[structopt(long)]
+    pub manual: bool,
 }
 
 static mut INSTALL_DIR: String = String::new();
@@ -42,7 +46,7 @@ fn install_dir() -> String {
 }
 
 fn setup() {
-    unsafe { INSTALL_DIR = install_dir() };
+    unsafe { INSTALL_DIR = install_dir() }; // Safe b/c it is initialized right at the start and never again.
 }
 
 pub fn get_options() -> Options {

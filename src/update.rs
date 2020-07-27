@@ -8,8 +8,8 @@ use sha::utils::{Digest, DigestExt};
 use futures::Future;
 use std::fs::DirBuilder;
 use sha::sha1::Sha1;
-use std::io::Write;
-use std::fs::File;
+use std::io::{Write, Read};
+use std::fs::{self, File};
 
 const MANIFEST_URL: &'static str = "https://cdn.toontownrewritten.com/content/patchmanifest.txt";
 const CDN_BASE_URL: &'static str = "https://download.toontownrewritten.com/patches/";
@@ -75,12 +75,10 @@ async fn update_file(dir: PathBuf, filename: String, obj: FileObject) -> Result<
         } else {
             // not up to date
             // check available patches
-            // match obj.patches.get(&hash) {
-            //     Some(patch) => patch_file(&path, &obj,patch).await,
-            //     None => download_fresh(&path, &obj).await,
-            // }
-            // TODO setup patching
-            download_fresh(&path, &obj).await
+            match obj.patches.get(&hash) {
+                Some(patch) => patch_file(&path, &obj, patch).await,
+                None => download_fresh(&path, &obj).await,
+            }
         }
     } else {
         download_fresh(&path, &obj).await
@@ -88,8 +86,7 @@ async fn update_file(dir: PathBuf, filename: String, obj: FileObject) -> Result<
 }
 
 async fn download_fresh(file_path: &Path, obj: &FileObject) -> Result<(), UpdateError> {
-    let url = format!("{}{}", CDN_BASE_URL, &obj.dl);
-    let bytes = reqwest::get(&url).await?.bytes().await?.to_vec();
+    let bytes = download_file(obj.dl.as_str()).await?;
     let dl_sha = sha1(&bytes).to_hex();
     if dl_sha == obj.comp_hash {
         let mut bzd = bzip2::write::BzDecoder::new(File::create(file_path)?);
@@ -101,10 +98,42 @@ async fn download_fresh(file_path: &Path, obj: &FileObject) -> Result<(), Update
     }
 }
 
-// TODO implement patchinng
+async fn download_file(name: &str) -> Result<Vec<u8>, UpdateError> {
+    let url = format!("{}{}", CDN_BASE_URL, name);
+    Ok(reqwest::get(&url).await?.bytes().await?.to_vec())
+}
+
+fn prealloc_file(file_path: &Path, size: usize) -> Result<File, UpdateError> {
+    let file = File::create(file_path)?;
+    file.set_len(size as u64)?;
+    Ok(file)
+}
+
 #[allow(unused)]
 async fn patch_file(file_path: &Path, file_object: &FileObject, patch_object: &PatchObject) -> Result<(), UpdateError> {
-    unimplemented!()
+    let comp_patch = download_file(patch_object.filename.as_str()).await?;
+    let comp_patch_sha = sha1(&comp_patch).to_hex();
+    if comp_patch_sha == patch_object.comp_patch_hash {
+        let size_hint =  comp_patch.len();
+        let mut decoder = bzip2::read::BzDecoder::new(std::io::Cursor::new(comp_patch));
+        let mut decomp_patch = Vec::with_capacity(size_hint);
+        decoder.read_to_end(&mut decomp_patch).map_err(|_| UpdateError::Patching)?;
+        let patch_sha = sha1(&decomp_patch).to_hex();
+        if patch_sha == patch_object.patch_hash {
+            let mut original_data = Vec::with_capacity(fs::metadata(file_path)?.len() as usize);
+            File::open(file_path)?.read_to_end(&mut original_data)?;
+            fs::remove_file(file_path)?;
+            let patcher = qbsdiff::Bspatch::new(decomp_patch.as_slice()).map_err(|_| UpdateError::Patching)?;
+            let mut file = prealloc_file(file_path, patcher.hint_target_size() as usize)?;
+            let final_len = patcher.apply(&original_data, &mut file).map_err(|_| UpdateError::Patching)?;
+            file.set_len(final_len);
+            Ok(())
+        }  else {
+            Err(UpdateError::Patching)
+        }
+    } else {
+        Err(UpdateError::Patching)
+    }
 }
 
 async fn fetch_manifest() -> Result<Manifest, UpdateError> {

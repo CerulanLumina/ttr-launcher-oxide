@@ -7,16 +7,19 @@ mod launch;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Update
+
     let opts = opt::get_options();
     if !opts.no_update {
-        // TODO real error handling
         if let Err(err) = update::update(&opts).await {
             eprintln!("Failed to update!\n{}", err);
             return Ok(());
         }
     }
 
+    // Get Username / pass
     let (username, password) = if opts.pass_stdin {
+        // If the password is passed from stdin, read it
         let username = opts.username.as_ref().unwrap().as_str();
         let mut bufreader = BufReader::new(tokio::io::stdin());
         let mut password = String::new();
@@ -31,6 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             opts.username.as_ref().unwrap().clone()
         };
         println!("Logging in on {}", &username);
+        // Retrieve password from keyring or tty
         let pass: Option<String> = if opts.keyring && !opts.reset_keyring {
             None
         } else {
@@ -41,19 +45,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         (username.to_string(), pass)
     };
 
+    // If user requested keyring reset, do that
     if opts.reset_keyring {
         login::reset_keyring(username.as_str());
     }
+
+    // Login
     let save_password = password.is_some() && opts.keyring;
     match login::login(username, password, save_password).await {
         Some(login_cookie) => {
             println!("Logged in successfully! {}", &login_cookie.server);
-            launch::launch(&opts, login_cookie).await
-        },
+            // Launch
+            if !opts.manual {
+                launch::launch(&opts, login_cookie).await;
+            } else {
+                println!("TTR_GAMESERVER={}\nTTR_PLAYCOOKIE={}", login_cookie.server, login_cookie.cookie);
+            }
+        }
         None => {
             println!("Failed to log in.");
         }
     }
+
     Ok(())
 }
 

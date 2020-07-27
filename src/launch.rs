@@ -10,14 +10,19 @@ pub async fn launch(options: &Options, token: LoginToken) {
     #[cfg(target_os = "linux")]
     let mut command = Command::new("./TTREngine");
 
+    // -- TODO verify this works --
     #[cfg(target_os = "windows")]
     let mut command = Command::new("./TTREngine.exe");
 
     #[cfg(target_os = "macos")]
         let mut command = Command::new("./Toontown Rewritten");
+    // ----
 
+    // Set the environment variables the engine expects
     command.env("TTR_GAMESERVER", token.server);
     command.env("TTR_PLAYCOOKIE", token.cookie);
+
+    // spawn and await its completion
     match command.spawn() {
         Ok(handle) => {
             match handle.await {
