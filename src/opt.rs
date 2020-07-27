@@ -37,7 +37,11 @@ static mut INSTALL_DIR: String = String::new();
 
 fn install_dir() -> String {
     match dirs::data_dir() {
-        Some(data) => data.join("toontown-rewritten").to_str().unwrap().to_string(),
+        Some(data) => data
+            .join("toontown-rewritten")
+            .to_str()
+            .unwrap()
+            .to_string(),
         None => {
             eprintln!("Unsupported OS. You will have to use the --install-dir option.");
             String::new()

@@ -1,9 +1,9 @@
-use tokio::io::{BufReader, AsyncBufReadExt};
+use tokio::io::{AsyncBufReadExt, BufReader};
 
+mod launch;
+mod login;
 mod opt;
 mod update;
-mod login;
-mod launch;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -59,7 +59,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             if !opts.manual {
                 launch::launch(&opts, login_cookie).await;
             } else {
-                println!("TTR_GAMESERVER={}\nTTR_PLAYCOOKIE={}", login_cookie.server, login_cookie.cookie);
+                println!(
+                    "TTR_GAMESERVER={}\nTTR_PLAYCOOKIE={}",
+                    login_cookie.server, login_cookie.cookie
+                );
             }
         }
         None => {
@@ -69,5 +72,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-

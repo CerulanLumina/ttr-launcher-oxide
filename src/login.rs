@@ -1,6 +1,5 @@
-
-use serde::{Serialize, Deserialize};
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use tokio::time::Duration;
 
@@ -14,7 +13,11 @@ pub fn reset_keyring(username: &str) {
     }
 }
 
-pub async fn login(username: String, password: Option<String>, save_password: bool) -> Option<LoginToken> {
+pub async fn login(
+    username: String,
+    password: Option<String>,
+    save_password: bool,
+) -> Option<LoginToken> {
     let password = match password {
         Some(p) => {
             if save_password {
@@ -24,7 +27,7 @@ pub async fn login(username: String, password: Option<String>, save_password: bo
                 }
             }
             p.to_string()
-        },
+        }
         None => {
             let keyring = keyring::Keyring::new(SERVICE_NAME, username.as_str());
             match keyring.get_password() {
@@ -36,25 +39,38 @@ pub async fn login(username: String, password: Option<String>, save_password: bo
             }
         }
     };
-    let credentials = Credentials { username: username.to_string(), password };
+    let credentials = Credentials {
+        username: username.to_string(),
+        password,
+    };
     let client = reqwest::Client::new();
-    let initial_request = client.post(LOGIN_URL)
+    let initial_request = client
+        .post(LOGIN_URL)
         .form(&credentials)
-        .build().expect("Forming request");
+        .build()
+        .expect("Forming request");
 
     match client.execute(initial_request).await {
         Ok(res) => {
             let response_result = res.json::<LoginResponse>().await;
-            if let Err(err) = response_result { eprintln!("Login error\n{}", err); return None }
+            if let Err(err) = response_result {
+                eprintln!("Login error\n{}", err);
+                return None;
+            }
             let response = response_result.unwrap();
 
             match response.success {
-                LoginResult::Success => Some(LoginToken { server: response.gameserver.unwrap(), cookie: response.cookie.unwrap() }),
+                LoginResult::Success => Some(LoginToken {
+                    server: response.gameserver.unwrap(),
+                    cookie: response.cookie.unwrap(),
+                }),
                 LoginResult::Partial => two_factor(&client, response.response_token.unwrap()).await,
                 LoginResult::Failure => None,
                 LoginResult::Delayed => {
-                    let eta = u32::from_str(response.eta.as_ref().unwrap()).expect("parsing eta number");
-                    let position = u32::from_str(response.position.as_ref().unwrap()).expect("parsing position number");
+                    let eta =
+                        u32::from_str(response.eta.as_ref().unwrap()).expect("parsing eta number");
+                    let position = u32::from_str(response.position.as_ref().unwrap())
+                        .expect("parsing position number");
                     let res = queue(&client, response.queue_token.unwrap(), eta, position).await;
                     if res.is_none() {
                         eprintln!("An error occurred while moving through the queue.");
@@ -62,7 +78,7 @@ pub async fn login(username: String, password: Option<String>, save_password: bo
                     res
                 }
             }
-        },
+        }
         Err(err) => {
             eprintln!("An error occurred while executing the request.\n{}", err);
             None
@@ -83,29 +99,39 @@ async fn queue(client: &Client, token: String, eta: u32, position: u32) -> Optio
     loop {
         println!("In queue -- Position: {}, ETA: {} seconds.", position, eta);
         async_std::task::sleep(Duration::from_secs(eta as u64)).await;
-        let queue_request = client.post(LOGIN_URL)
-            .form(&QueueToken{queue_token: token.clone()})
-            .build().expect("Forming request");
+        let queue_request = client
+            .post(LOGIN_URL)
+            .form(&QueueToken {
+                queue_token: token.clone(),
+            })
+            .build()
+            .expect("Forming request");
 
         let resp = client.execute(queue_request).await;
         let resp = if resp.is_ok() {
             resp.unwrap().json::<LoginResponse>().await
-        } else { Err(resp.unwrap_err()) };
+        } else {
+            Err(resp.unwrap_err())
+        };
         match resp {
             Err(err) => {
                 eprintln!("Failed to update position in queue.\n{}", err);
                 return None;
-            },
+            }
             Ok(resp) => {
-                if resp.success.is_success() { return Some(LoginToken{server: resp.gameserver.unwrap(), cookie: resp.cookie.unwrap()}) }
-                else {
+                if resp.success.is_success() {
+                    return Some(LoginToken {
+                        server: resp.gameserver.unwrap(),
+                        cookie: resp.cookie.unwrap(),
+                    });
+                } else {
                     eta = u32::from_str(resp.eta.as_ref().unwrap()).expect("parsing eta number");
-                    position = u32::from_str(resp.position.as_ref().unwrap()).expect("parsing position number");
+                    position = u32::from_str(resp.position.as_ref().unwrap())
+                        .expect("parsing position number");
                     token = resp.queue_token.as_ref().unwrap().clone();
                 }
             }
         }
-
     }
 }
 
@@ -124,7 +150,7 @@ struct Credentials {
 #[derive(Serialize)]
 struct QueueToken {
     #[serde(rename = "queueToken")]
-    queue_token: String
+    queue_token: String,
 }
 
 #[derive(Deserialize)]
@@ -155,8 +181,32 @@ enum LoginResult {
 
 #[allow(unused)]
 impl LoginResult {
-    pub fn is_success(&self) -> bool { if let Self::Success = self { true } else { false } }
-    pub fn is_delayed(&self) -> bool { if let Self::Delayed = self { true } else { false } }
-    pub fn is_partial(&self) -> bool { if let Self::Partial = self { true } else { false } }
-    pub fn is_failure(&self) -> bool { if let Self::Failure = self { true } else { false } }
+    pub fn is_success(&self) -> bool {
+        if let Self::Success = self {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn is_delayed(&self) -> bool {
+        if let Self::Delayed = self {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn is_partial(&self) -> bool {
+        if let Self::Partial = self {
+            true
+        } else {
+            false
+        }
+    }
+    pub fn is_failure(&self) -> bool {
+        if let Self::Failure = self {
+            true
+        } else {
+            false
+        }
+    }
 }

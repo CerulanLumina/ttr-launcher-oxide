@@ -1,15 +1,15 @@
 use crate::opt::Options;
 
-pub use error::*;
-use manifest::Manifest;
 use crate::update::manifest::{FileObject, PatchObject};
-use std::path::{Path, PathBuf};
-use sha::utils::{Digest, DigestExt};
+pub use error::*;
 use futures::Future;
-use std::fs::DirBuilder;
+use manifest::Manifest;
 use sha::sha1::Sha1;
-use std::io::{Write, Read};
+use sha::utils::{Digest, DigestExt};
+use std::fs::DirBuilder;
 use std::fs::{self, File};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
 
 const MANIFEST_URL: &'static str = "https://cdn.toontownrewritten.com/content/patchmanifest.txt";
 const CDN_BASE_URL: &'static str = "https://download.toontownrewritten.com/patches/";
@@ -25,17 +25,20 @@ const PLATFORM_KEY: &'static str = "win32";
 
 pub async fn update(options: &Options) -> Result<(), UpdateError> {
     if !options.install_dir.exists() {
-        DirBuilder::new().recursive(true).create(&options.install_dir)?;
+        DirBuilder::new()
+            .recursive(true)
+            .create(&options.install_dir)?;
     }
     let platform_key_string = String::from(PLATFORM_KEY);
     let manifest: Manifest = fetch_manifest().await?;
     let handle = tokio::runtime::Handle::current();
-    let threads = manifest.into_iter()
+    let threads = manifest
+        .into_iter()
         .filter(|a| a.1.only.contains(&platform_key_string))
         .map(|a| update_file(options.install_dir.clone(), a.0, a.1))
         .map(|fut| handle.spawn(fut));
     join_updaters(threads).await;
-    if let Err(err) = set_executable(options.install_dir.join("TTREngine")).await  {
+    if let Err(err) = set_executable(options.install_dir.join("TTREngine")).await {
         eprintln!("Failed to set executable flag!\n{}", err);
         Err(err)
     } else {
@@ -54,14 +57,16 @@ async fn set_executable(engine: PathBuf) -> Result<(), UpdateError> {
 }
 
 #[cfg(not(unix))]
-fn set_executable(_: PathBuf) -> Result<(), UpdateError> { Ok(()) }
+fn set_executable(_: PathBuf) -> Result<(), UpdateError> {
+    Ok(())
+}
 
-async fn join_updaters<I>(i: I) where
+async fn join_updaters<I>(i: I)
+where
     I: IntoIterator,
-    <I as IntoIterator>::Item: Future {
-
+    <I as IntoIterator>::Item: Future,
+{
     futures::future::join_all(i).await;
-
 }
 
 async fn update_file(dir: PathBuf, filename: String, obj: FileObject) -> Result<(), UpdateError> {
@@ -110,25 +115,34 @@ fn prealloc_file(file_path: &Path, size: usize) -> Result<File, UpdateError> {
 }
 
 #[allow(unused)]
-async fn patch_file(file_path: &Path, file_object: &FileObject, patch_object: &PatchObject) -> Result<(), UpdateError> {
+async fn patch_file(
+    file_path: &Path,
+    file_object: &FileObject,
+    patch_object: &PatchObject,
+) -> Result<(), UpdateError> {
     let comp_patch = download_file(patch_object.filename.as_str()).await?;
     let comp_patch_sha = sha1(&comp_patch).to_hex();
     if comp_patch_sha == patch_object.comp_patch_hash {
-        let size_hint =  comp_patch.len();
+        let size_hint = comp_patch.len();
         let mut decoder = bzip2::read::BzDecoder::new(std::io::Cursor::new(comp_patch));
         let mut decomp_patch = Vec::with_capacity(size_hint);
-        decoder.read_to_end(&mut decomp_patch).map_err(|_| UpdateError::Patching)?;
+        decoder
+            .read_to_end(&mut decomp_patch)
+            .map_err(|_| UpdateError::Patching)?;
         let patch_sha = sha1(&decomp_patch).to_hex();
         if patch_sha == patch_object.patch_hash {
             let mut original_data = Vec::with_capacity(fs::metadata(file_path)?.len() as usize);
             File::open(file_path)?.read_to_end(&mut original_data)?;
             fs::remove_file(file_path)?;
-            let patcher = qbsdiff::Bspatch::new(decomp_patch.as_slice()).map_err(|_| UpdateError::Patching)?;
+            let patcher = qbsdiff::Bspatch::new(decomp_patch.as_slice())
+                .map_err(|_| UpdateError::Patching)?;
             let mut file = prealloc_file(file_path, patcher.hint_target_size() as usize)?;
-            let final_len = patcher.apply(&original_data, &mut file).map_err(|_| UpdateError::Patching)?;
+            let final_len = patcher
+                .apply(&original_data, &mut file)
+                .map_err(|_| UpdateError::Patching)?;
             file.set_len(final_len);
             Ok(())
-        }  else {
+        } else {
             Err(UpdateError::Patching)
         }
     } else {
@@ -171,8 +185,8 @@ mod manifest {
 }
 
 mod error {
-    use std::fmt::{Debug, Result as FmtResult, Formatter};
     use reqwest::Error;
+    use std::fmt::{Debug, Formatter, Result as FmtResult};
 
     #[derive(Debug)]
     pub enum UpdateError {
@@ -187,7 +201,9 @@ mod error {
         fn fmt(&self, f: &mut Formatter) -> FmtResult {
             match self {
                 // TODO add more information
-                Self::Downloading(inner) => write!(f, "Error occurred while downloading a file: {}", inner),
+                Self::Downloading(inner) => {
+                    write!(f, "Error occurred while downloading a file: {}", inner)
+                }
                 Self::Parsing(inner) => write!(f, "The web response was malformed: {}", inner),
                 Self::IO(inner) => write!(f, "An IO error occurred: {}", inner),
                 Self::Patching => write!(f, "Error occurred while patching a file"),
@@ -197,7 +213,9 @@ mod error {
 
     impl From<reqwest::Error> for UpdateError {
         fn from(err: Error) -> Self {
-            if err.is_builder() { panic!("The request API was incorrectly called! This is a bug!"); }
+            if err.is_builder() {
+                panic!("The request API was incorrectly called! This is a bug!");
+            }
             Self::Downloading(err)
         }
     }
