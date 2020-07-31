@@ -185,7 +185,6 @@ mod manifest {
 }
 
 mod error {
-    use reqwest::Error;
     use std::fmt::{Debug, Formatter, Result as FmtResult};
 
     #[derive(Debug)]
@@ -212,7 +211,7 @@ mod error {
     }
 
     impl From<reqwest::Error> for UpdateError {
-        fn from(err: Error) -> Self {
+        fn from(err: reqwest::Error) -> Self {
             if err.is_builder() {
                 panic!("The request API was incorrectly called! This is a bug!");
             }

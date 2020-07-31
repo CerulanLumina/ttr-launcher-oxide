@@ -1,3 +1,6 @@
+#![deny(unreachable_code, unreachable_patterns, unused_assignments, unused_must_use, unused_extern_crates)]
+#![warn(unused_qualifications, unused_import_braces)]
+
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 mod launch;
